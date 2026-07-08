@@ -1,9 +1,15 @@
-"""Testes da API FastAPI (Etapa 6)."""
+"""Testes da API (Etapa 6).
+
+Testamos a lógica das rotas chamando as funções diretamente e a validação de
+entrada pelo Pydantic — sem depender de um cliente HTTP de teste (evita
+incompatibilidades de versão do Starlette/httpx no CI).
+"""
 import pytest
-from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from xgboost import XGBClassifier
 
 from app import main
+from app.main import CreditApplication, health, predict
 from src.data.generate_synthetic import generate_credit
 from src.features.build_features import make_xy
 from src.models.train import _build_pipeline
@@ -18,30 +24,27 @@ SAMPLE = {
 
 
 @pytest.fixture
-def client(monkeypatch):
+def patched_model(monkeypatch):
     x, y = make_xy(generate_credit(n=1500, seed=1))
     model = XGBClassifier(n_estimators=40, max_depth=3, eval_metric="logloss", n_jobs=1)
     pipe = _build_pipeline(model).fit(x, y)
     monkeypatch.setattr(main, "get_model", lambda: pipe)
-    return TestClient(main.app)
+    return pipe
 
 
-def test_health(client):
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+def test_health():
+    body = health()
+    assert body["status"] == "ok"
+    assert "model_loaded" in body
 
 
-def test_predict_returns_valid_schema(client):
-    r = client.post("/predict", json=SAMPLE)
-    assert r.status_code == 200
-    body = r.json()
-    assert 0.0 <= body["default_probability"] <= 1.0
-    assert body["risk_band"] in {"BAIXO", "MEDIO", "ALTO"}
-    assert isinstance(body["will_default"], bool)
+def test_predict_returns_valid_schema(patched_model):
+    result = predict(CreditApplication(**SAMPLE))
+    assert 0.0 <= result.default_probability <= 1.0
+    assert result.risk_band in {"BAIXO", "MEDIO", "ALTO"}
+    assert isinstance(result.will_default, bool)
 
 
-def test_predict_rejects_bad_input(client):
-    bad = {**SAMPLE, "age": 5}  # < 18 viola a validação
-    r = client.post("/predict", json=bad)
-    assert r.status_code == 422
+def test_input_validation_rejects_underage():
+    with pytest.raises(ValidationError):
+        CreditApplication(**{**SAMPLE, "age": 5})  # < 18 viola o Field(ge=18)
