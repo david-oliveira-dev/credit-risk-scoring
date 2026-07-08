@@ -10,10 +10,16 @@ env/
 data/raw/*.csv
 data/processed/*.parquet
 data/processed/*.csv
+data/processed/*.db
+
+# Logs de treino do CatBoost
+catboost_info/
 models/*.pkl
 models/*.joblib
 models/*.cbm
 mlruns/
+mlflow.db
+mlartifacts/
 
 # Notebooks
 .ipynb_checkpoints/

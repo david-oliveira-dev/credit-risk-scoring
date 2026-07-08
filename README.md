@@ -5,8 +5,18 @@ probabilidade de inadimplência (default) de um empréstimo — de dados a model
 servido em API, com dashboard e monitoramento. Projeto de portfólio para vaga
 de **Cientista de Dados Pleno**.
 
-> 🚧 **Em construção incremental.** Roteiro completo em
-> [`BUILD_BRIEF.md`](BUILD_BRIEF.md). Etapa atual: **1 — geração de dados**.
+> ✅ **Projeto completo** (9 etapas). Roteiro em [`BUILD_BRIEF.md`](BUILD_BRIEF.md),
+> arquitetura e relatório técnico em [`reports/`](reports/).
+
+## Resultados
+Comparação XGBoost vs CatBoost (base desbalanceada, ~21% default):
+
+| Modelo | ROC-AUC | PR-AUC | KS | Recall (default) | F1 (default) |
+|---|---|---|---|---|---|
+| XGBoost | 0.863 | 0.665 | 0.578 | 0.579 | 0.621 |
+| **CatBoost** ✅ | **0.865** | **0.675** | **0.589** | 0.573 | **0.624** |
+
+Interpretabilidade via SHAP em [`reports/shap_summary.png`](reports/shap_summary.png).
 
 ## Stack
 Python 3.12 · Pandas/NumPy · scikit-learn · XGBoost · CatBoost ·
@@ -32,13 +42,25 @@ python -m src.data.generate_synthetic --n 12000 --seed 42
 pytest -q
 ```
 
+## Como servir (API + dashboard)
+```bash
+python -m src.data.etl          # carrega dados
+python -m src.models.train      # treina e salva o melhor modelo
+python -m src.models.explain    # gera o SHAP
+
+uvicorn app.main:app --reload            # API em http://localhost:8000/docs
+streamlit run app/dashboard.py           # dashboard em http://localhost:8501
+# ou tudo via Docker:
+docker compose up --build
+```
+
 ## Status das etapas
 - [x] 1 — Geração de dados sintéticos
-- [ ] 2 — ETL + carga no banco
-- [ ] 3 — EDA
-- [ ] 4 — Feature Engineering
-- [ ] 5 — Treino (SMOTE) e comparação de modelos
-- [ ] 6 — API FastAPI
-- [ ] 7 — Dashboard Streamlit
-- [ ] 8 — Docker + Compose
-- [ ] 9 — Testes, CI e documentação
+- [x] 2 — ETL + carga no banco
+- [x] 3 — EDA
+- [x] 4 — Feature Engineering
+- [x] 5 — Treino (SMOTE) e comparação de modelos
+- [x] 6 — API FastAPI
+- [x] 7 — Dashboard Streamlit
+- [x] 8 — Docker + Compose
+- [x] 9 — Testes, CI e documentação

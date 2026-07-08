@@ -1,0 +1,19 @@
+{
+  "best_model": "catboost",
+  "metrics": {
+    "xgboost": {
+      "roc_auc": 0.863,
+      "pr_auc": 0.6653,
+      "ks": 0.5778,
+      "recall_default": 0.5785,
+      "f1_default": 0.6205
+    },
+    "catboost": {
+      "roc_auc": 0.8653,
+      "pr_auc": 0.6754,
+      "ks": 0.5888,
+      "recall_default": 0.5726,
+      "f1_default": 0.6241
+    }
+  }
+}
