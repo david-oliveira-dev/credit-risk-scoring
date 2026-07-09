@@ -13,8 +13,15 @@ Uso:
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
+
+# Permite rodar via `streamlit run app/dashboard.py`: garante a raiz do projeto
+# no sys.path (senão o pacote `src` não é encontrado, pois o cwd fica em app/).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src import config
 from src.features.build_features import (
