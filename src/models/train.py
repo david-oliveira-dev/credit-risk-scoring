@@ -27,6 +27,7 @@ from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.metrics import (
     average_precision_score,
     f1_score,
+    precision_score,
     recall_score,
     roc_auc_score,
     roc_curve,
@@ -60,16 +61,59 @@ def _ks_statistic(y_true: np.ndarray, y_score: np.ndarray) -> float:
     return float(np.max(tpr - fpr))
 
 
+def carregar_bundle() -> dict:
+    """Carrega o artefato salvo: ``{"pipeline", "threshold", "model"}``.
+
+    Ponto único de leitura do modelo — usado pela API, pelo dashboard e pelo
+    SHAP, para que os três enxerguem o mesmo limiar.
+    """
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Modelo não encontrado em {MODEL_PATH}. Rode 'python -m src.models.train'."
+        )
+    return joblib.load(MODEL_PATH)
+
+
+def melhor_limiar(y_true: np.ndarray, proba: np.ndarray) -> float:
+    """Limiar que maximiza o F1 na classe default.
+
+    O padrão de 0.5 é arbitrário e, numa base com 22% de positivos, custa caro:
+    o modelo fica conservador demais e deixa passar a maioria dos inadimplentes.
+    Aqui o corte é escolhido pelos dados. Em produção o critério seria o custo
+    real do negócio (perda de um default vs. margem perdida numa recusa), e este
+    F1 é o substituto neutro enquanto esses números não estão na mesa.
+    """
+    grade = np.linspace(0.05, 0.95, 181)
+    f1s = [f1_score(y_true, (proba >= t).astype(int)) for t in grade]
+    return float(grade[int(np.argmax(f1s))])
+
+
 def evaluate(pipe: ImbPipeline, x_test: pd.DataFrame, y_test: pd.Series) -> dict:
-    """Calcula as métricas apropriadas para base desbalanceada."""
+    """Métricas apropriadas para base desbalanceada, em dois limiares.
+
+    As métricas de ranqueamento (ROC-AUC, PR-AUC, KS) não dependem de limiar.
+    Já recall/precisão/F1 dependem — por isso são reportadas tanto no 0.5 padrão
+    quanto no limiar calibrado, que é o que a API usa.
+    """
     proba = pipe.predict_proba(x_test)[:, 1]
-    pred = (proba >= 0.5).astype(int)
+    y = y_test.to_numpy()
+    limiar = melhor_limiar(y, proba)
+
+    pred_05 = (proba >= 0.5).astype(int)
+    pred_cal = (proba >= limiar).astype(int)
     return {
-        "roc_auc": round(roc_auc_score(y_test, proba), 4),
-        "pr_auc": round(average_precision_score(y_test, proba), 4),
-        "ks": round(_ks_statistic(y_test.to_numpy(), proba), 4),
-        "recall_default": round(recall_score(y_test, pred), 4),
-        "f1_default": round(f1_score(y_test, pred), 4),
+        "roc_auc": round(roc_auc_score(y, proba), 4),
+        "pr_auc": round(average_precision_score(y, proba), 4),
+        "ks": round(_ks_statistic(y, proba), 4),
+        "threshold": round(limiar, 3),
+        # limiar padrão (0.5)
+        "recall_default": round(recall_score(y, pred_05), 4),
+        "precision_default": round(precision_score(y, pred_05), 4),
+        "f1_default": round(f1_score(y, pred_05), 4),
+        # limiar calibrado
+        "recall_calibrado": round(recall_score(y, pred_cal), 4),
+        "precision_calibrada": round(precision_score(y, pred_cal), 4),
+        "f1_calibrado": round(f1_score(y, pred_cal), 4),
     }
 
 
@@ -126,7 +170,13 @@ def train_and_compare() -> dict:
     best_name, best_metrics, best_pipe = best
     config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    joblib.dump(best_pipe, MODEL_PATH)
+
+    # Salva o bundle: o pipeline sozinho não basta, o limiar calibrado faz parte
+    # da decisão e precisa viajar junto para a API não voltar ao 0.5 implícito.
+    joblib.dump(
+        {"pipeline": best_pipe, "threshold": best_metrics["threshold"], "model": best_name},
+        MODEL_PATH,
+    )
     payload = {"best_model": best_name, "metrics": results}
     METRICS_PATH.write_text(json.dumps(payload, indent=2))
     logger.info("Melhor modelo: %s (PR-AUC=%.4f) salvo em %s",

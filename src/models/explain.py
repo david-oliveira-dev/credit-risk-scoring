@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 
-import joblib
 import matplotlib
 import shap
 
@@ -18,7 +17,7 @@ matplotlib.use("Agg")  # backend sem display (roda em servidor/CI)
 import matplotlib.pyplot as plt  # noqa: E402
 
 from src import config  # noqa: E402
-from src.models.train import MODEL_PATH, _get_data  # noqa: E402
+from src.models.train import _get_data, carregar_bundle  # noqa: E402
 from src.features.build_features import make_xy  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -29,10 +28,7 @@ SHAP_PLOT = config.REPORTS_DIR / "shap_summary.png"
 
 def explain(sample_size: int = 500) -> None:
     """Calcula SHAP num recorte dos dados e salva o summary plot."""
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"Modelo não encontrado em {MODEL_PATH}. Rode o treino antes.")
-
-    pipe = joblib.load(MODEL_PATH)
+    pipe = carregar_bundle()["pipeline"]
     pre = pipe.named_steps["preprocessor"]
     clf = pipe.named_steps["classifier"]
 

@@ -1,5 +1,6 @@
 # Core
 pandas>=2.2
+xlrd>=2.0  # leitura do .xls original do UCI
 numpy>=1.26
 
 # Modelagem

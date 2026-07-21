@@ -15,11 +15,17 @@ DATA_PROCESSED = ROOT / "data" / "processed"
 MODELS_DIR = ROOT / "models"
 REPORTS_DIR = ROOT / "reports"
 
-RAW_CSV = DATA_RAW / "credit.csv"
+RAW_CSV = DATA_RAW / "uci_credit_default.csv"
 PROCESSED_PARQUET = DATA_PROCESSED / "credit.parquet"
 
 TABLE_NAME = "credit"
 TARGET = "default"
+
+# Dataset real: Default of Credit Card Clients (Yeh & Lien, 2009) — UCI.
+UCI_URL = (
+    "https://archive.ics.uci.edu/static/public/350/"
+    "default+of+credit+card+clients.zip"
+)
 
 
 def get_database_url() -> str:

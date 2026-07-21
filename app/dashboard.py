@@ -1,9 +1,9 @@
 """Etapa 7 — Dashboard Streamlit de risco de crédito.
 
 Três blocos:
-  1. KPIs da carteira (volume, taxa de default, ticket médio)
-  2. EDA visual (default por segmento, distribuição de comprometimento de renda)
-  3. Simulador de score: preencha uma solicitação e veja a probabilidade de default
+  1. KPIs da carteira (clientes, taxa de default, limite médio, utilização)
+  2. EDA visual (default por status de pagamento, escolaridade e utilização)
+  3. Simulador de score: monte um perfil e veja a probabilidade de default
 
 O simulador usa o modelo treinado localmente (models/model.joblib). Rode antes:
     python -m src.models.train
@@ -32,6 +32,17 @@ from src.features.build_features import (
 
 st.set_page_config(page_title="Credit Risk Scoring", page_icon="💳", layout="wide")
 
+ESCOLARIDADE = {1: "Pós-graduação", 2: "Universitário", 3: "Ensino médio", 4: "Outros"}
+ESTADO_CIVIL = {1: "Casado", 2: "Solteiro", 3: "Outros"}
+STATUS_PAGAMENTO = {
+    -2: "-2 · sem consumo",
+    -1: "-1 · pago em dia",
+    0: "0 · rotativo (mínimo)",
+    1: "1 · 1 mês de atraso",
+    2: "2 · 2 meses de atraso",
+    3: "3 · 3 meses de atraso",
+}
+
 
 @st.cache_data
 def load_data() -> pd.DataFrame:
@@ -41,72 +52,101 @@ def load_data() -> pd.DataFrame:
 
 
 @st.cache_resource
-def load_model():
-    import joblib
-    if config.MODELS_DIR.joinpath("model.joblib").exists():
-        return joblib.load(config.MODELS_DIR / "model.joblib")
-    return None
+def load_bundle():
+    """Carrega o bundle (pipeline + limiar); None se o modelo não foi treinado."""
+    from src.models.train import carregar_bundle
+
+    try:
+        return carregar_bundle()
+    except FileNotFoundError:
+        return None
 
 
 st.title("💳 Credit Risk Scoring")
+st.caption(
+    "Dados reais: **Default of Credit Card Clients** (UCI) — 30.000 clientes de "
+    "cartão em Taiwan, histórico de abr–set/2005."
+)
 
 df = load_data()
+com_features = add_engineered_features(df)
 
 # --- 1. KPIs ---
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Solicitações", f"{len(df):,}")
+c1.metric("Clientes", f"{len(df):,}".replace(",", "."))
 c2.metric("Taxa de default", f"{df['default'].mean():.1%}")
-c3.metric("Empréstimo médio", f"R$ {df['loan_amount'].mean():,.0f}")
-c4.metric("Juros médio", f"{df['interest_rate'].mean():.1f}%")
+c3.metric("Limite médio", f"NT$ {df['limit_bal'].mean():,.0f}".replace(",", "."))
+c4.metric("Utilização média do limite", f"{com_features['utilization_mean'].mean():.0%}")
 
 st.divider()
 
 # --- 2. EDA ---
 left, right = st.columns(2)
 with left:
-    st.subheader("Default por tipo de moradia")
-    st.bar_chart(df.groupby("home_ownership")["default"].mean())
+    st.subheader("Default por status do último pagamento")
+    st.caption("Códigos negativos e o zero não são documentados — e não são monótonos.")
+    st.bar_chart(df.groupby("pay_1")["default"].mean())
 with right:
-    st.subheader("Default por finalidade do empréstimo")
-    st.bar_chart(df.groupby("loan_intent")["default"].mean())
+    st.subheader("Default por escolaridade")
+    por_escolaridade = df.groupby("education")["default"].mean()
+    por_escolaridade.index = [ESCOLARIDADE.get(i, str(i)) for i in por_escolaridade.index]
+    st.bar_chart(por_escolaridade)
 
-st.subheader("Comprometimento de renda (loan_percent_income)")
-st.bar_chart(df["loan_percent_income"].round(1).value_counts().sort_index())
+st.subheader("Default por faixa de utilização do limite")
+faixas = pd.cut(
+    com_features["utilization_mean"],
+    bins=[-float("inf"), 0.1, 0.3, 0.6, 0.9, float("inf")],
+    labels=["até 10%", "10–30%", "30–60%", "60–90%", "acima de 90%"],
+)
+st.bar_chart(com_features.groupby(faixas, observed=True)["default"].mean())
 
 st.divider()
 
 # --- 3. Simulador ---
 st.subheader("🎯 Simulador de score")
-model = load_model()
-if model is None:
+bundle = load_bundle()
+if bundle is None:
     st.warning("Modelo não encontrado. Rode `python -m src.models.train` primeiro.")
 else:
+    limiar = bundle["threshold"]
     a, b, c = st.columns(3)
-    entrada = {
-        "age": a.number_input("Idade", 18, 100, 35),
-        "income": a.number_input("Renda anual", 12000, 400000, 60000, step=1000),
-        "employment_length": a.number_input("Anos de emprego", 0, 40, 5),
-        "home_ownership": b.selectbox("Moradia", ["RENT", "MORTGAGE", "OWN"]),
-        "loan_intent": b.selectbox(
-            "Finalidade",
-            ["PERSONAL", "EDUCATION", "MEDICAL", "VENTURE",
-             "HOMEIMPROVEMENT", "DEBTCONSOLIDATION"],
-        ),
-        "loan_amount": b.number_input("Valor do empréstimo", 1000, 45000, 12000, step=500),
-        "interest_rate": c.slider("Juros (%)", 5.0, 24.0, 11.5),
-        "loan_percent_income": c.slider("Parcela/renda", 0.01, 1.5, 0.2),
-        "debt_to_income": c.slider("Dívida/renda", 0.02, 2.0, 0.35),
-        "credit_history_length": a.number_input("Histórico de crédito (anos)", 1, 30, 8),
-        "num_credit_lines": b.number_input("Linhas de crédito", 1, 15, 4),
-        "past_delinquencies": c.number_input("Atrasos passados", 0, 10, 0),
-    }
+
+    limite = a.number_input("Limite de crédito (NT$)", 10_000, 1_000_000, 200_000, step=10_000)
+    idade = a.number_input("Idade", 18, 100, 35)
+    escolaridade = a.selectbox("Escolaridade", list(ESCOLARIDADE), format_func=ESCOLARIDADE.get)
+    estado_civil = b.selectbox("Estado civil", list(ESTADO_CIVIL), format_func=ESTADO_CIVIL.get)
+    sexo = b.selectbox("Sexo", [1, 2], format_func=lambda v: "Masculino" if v == 1 else "Feminino")
+    status = b.selectbox(
+        "Status do último pagamento", list(STATUS_PAGAMENTO), index=2,
+        format_func=STATUS_PAGAMENTO.get,
+    )
+    fatura = c.number_input("Fatura do mês (NT$)", 0, 1_000_000, 50_000, step=5_000)
+    pagamento = c.number_input("Valor pago no mês (NT$)", 0, 1_000_000, 3_000, step=1_000)
+    meses_atraso = c.slider("Meses em atraso nos últimos 6", 0, 6, 0)
+
     if st.button("Calcular risco", type="primary"):
+        # Replica o histórico de 6 meses a partir dos controles do simulador:
+        # os `meses_atraso` primeiros meses recebem o status de atraso.
+        historico = {}
+        for i in range(1, 7):
+            historico[f"pay_{i}"] = max(status, 1) if i <= meses_atraso else status
+            historico[f"bill_amt{i}"] = fatura
+            historico[f"pay_amt{i}"] = pagamento
+
+        entrada = {
+            "limit_bal": limite, "sex": sexo, "education": escolaridade,
+            "marriage": estado_civil, "age": idade, **historico,
+        }
         x = add_engineered_features(pd.DataFrame([entrada]))[
             NUMERIC_FEATURES + CATEGORICAL_FEATURES
         ]
-        proba = float(model.predict_proba(x)[:, 1][0])
-        band = "BAIXO" if proba < 0.10 else "MEDIO" if proba < 0.30 else "ALTO"
-        st.metric("Probabilidade de default", f"{proba:.1%}", help=f"Faixa de risco: {band}")
-        (st.success if band == "BAIXO" else st.warning if band == "MEDIO" else st.error)(
-            f"Risco {band}"
+        proba = float(bundle["pipeline"].predict_proba(x)[:, 1][0])
+        faixa = "BAIXO" if proba < limiar / 2 else "MEDIO" if proba < limiar else "ALTO"
+
+        st.metric(
+            "Probabilidade de default", f"{proba:.1%}",
+            help=f"Limiar de decisão calibrado: {limiar:.1%}",
+        )
+        (st.success if faixa == "BAIXO" else st.warning if faixa == "MEDIO" else st.error)(
+            f"Risco {faixa} — o limiar de decisão está em {limiar:.1%}"
         )

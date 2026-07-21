@@ -2,18 +2,28 @@
   "best_model": "catboost",
   "metrics": {
     "xgboost": {
-      "roc_auc": 0.863,
-      "pr_auc": 0.6653,
-      "ks": 0.5778,
-      "recall_default": 0.5785,
-      "f1_default": 0.6205
+      "roc_auc": 0.7679,
+      "pr_auc": 0.5445,
+      "ks": 0.3985,
+      "threshold": 0.43,
+      "recall_default": 0.4133,
+      "precision_default": 0.5937,
+      "f1_default": 0.4873,
+      "recall_calibrado": 0.4887,
+      "precision_calibrada": 0.5455,
+      "f1_calibrado": 0.5155
     },
     "catboost": {
-      "roc_auc": 0.8653,
-      "pr_auc": 0.6754,
-      "ks": 0.5888,
-      "recall_default": 0.5726,
-      "f1_default": 0.6241
+      "roc_auc": 0.7727,
+      "pr_auc": 0.5545,
+      "ks": 0.4191,
+      "threshold": 0.335,
+      "recall_default": 0.3959,
+      "precision_default": 0.6235,
+      "f1_default": 0.4843,
+      "recall_calibrado": 0.5867,
+      "precision_calibrada": 0.4847,
+      "f1_calibrado": 0.5309
     }
   }
 }
