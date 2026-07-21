@@ -122,6 +122,10 @@ de decisão** move o recall em **19 pontos**:
 | 0.50 (padrão) | 0.396 | 0.624 | 0.484 |
 | **0.335 (calibrado)** | **0.587** | 0.485 | **0.531** |
 
+![Trade-off do limiar](reports/figures/tradeoff_limiar.png)
+
+![Curva precisão–recall](reports/figures/curva_pr.png)
+
 No corte padrão de 0.5 o modelo captura **menos de 40%** dos inadimplentes — para
 uma área de crédito, isso é o modelo falhando na sua função. Calibrando o limiar
 por F1, a captura sobe para **58,7%**, ao custo de a precisão cair de 62% para
