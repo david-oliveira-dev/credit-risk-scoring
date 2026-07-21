@@ -4,7 +4,7 @@ Assim como no projeto de churn, o alvo (`default`) não é sorteado à toa: ele 
 de um *modelo logístico latente* baseado nas features de crédito. Isso dá **sinal
 real** — quem tem alta relação parcela/renda, muita dívida sobre a renda, histórico
 curto e passado de atrasos tende a inadimplir — e o dataset nasce **desbalanceado**
-(~12% de default), que é justamente o cenário onde o SMOTE faz sentido.
+(~21% de default), que é justamente o cenário onde o SMOTE faz sentido.
 
 Uso:
     python -m src.data.generate_synthetic --n 12000 --seed 42
@@ -28,7 +28,7 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
 
 
 def generate_credit(n: int = 12000, seed: int = 42) -> pd.DataFrame:
-    """Gera `n` solicitações de crédito sintéticas com alvo `default` (~12%)."""
+    """Gera `n` solicitações de crédito sintéticas com alvo `default` (~21%)."""
     rng = np.random.default_rng(seed)
 
     # --- Perfil do solicitante ---
